@@ -18,11 +18,6 @@ public class TwitchAuthManager : MonoBehaviour
 
     public event Action<string> OnStreamTitleFetched;
 
-    private async void Start()
-    {
-        await InitiateDeviceAuthAsync();
-    }
-
     private async Task InitiateDeviceAuthAsync()
     {
         loginCanvas.SetActive(true);
@@ -65,6 +60,8 @@ public class TwitchAuthManager : MonoBehaviour
 
     private void Start()
     {
+        await InitiateDeviceAuthAsync();
+        
         // Initialize login flow through the official plugin
         Twitch.API.GetAuthenticationInfo(new TwitchOAuthScope(TwitchOAuthScope.Channel.ManageRedemptions.Scope));
     }

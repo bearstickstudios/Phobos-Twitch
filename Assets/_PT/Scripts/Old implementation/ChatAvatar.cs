@@ -429,3 +429,7 @@ public class ChatAvatar : MonoBehaviour
         }
     }
 }
+
+public class Pet
+{
+}

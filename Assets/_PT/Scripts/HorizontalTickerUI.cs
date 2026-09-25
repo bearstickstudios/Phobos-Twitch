@@ -11,7 +11,7 @@ public class HorizontalTickerUI : MonoBehaviour
 
     private void Update()
     {
-        textRectTransform.anchoredPosition += Vector3.left * (scrollSpeed * Time.deltaTime);
+        textRectTransform.anchoredPosition += Vector2.left * (scrollSpeed * Time.deltaTime);
 
         if (textRectTransform.anchoredPosition.x <= resetPositionX)
         {

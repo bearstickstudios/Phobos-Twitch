@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class RedemptionContext
 {
@@ -6,5 +6,4 @@ public class RedemptionContext
     public ChatAvatarManager AvatarManager { get; set; }
     public Transform VipRock { get; set; }
     public Animator FightAnimator { get; set; }
-    public MonoBehaviour CoroutineRunner { get; set; }
 }

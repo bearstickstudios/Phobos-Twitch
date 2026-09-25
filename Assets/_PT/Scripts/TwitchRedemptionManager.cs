@@ -1,4 +1,7 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using TwitchSDK;
 using TwitchSDK.Interop;
 using UnityEngine;
@@ -15,10 +18,8 @@ public class TwitchRedemptionManager : MonoBehaviour
     [SerializeField] private List<RedemptionActionSO> availableRedemptions;
 
     private Dictionary<string, RedemptionActionSO> redemptionLookup;
-    
-    // Core GameTask for pulling events as documented in Unity SDK reference
-    private GameTask<EventStream<CustomRewardEvent>> customRewardEvents;
-    private bool isSubscribed = false;
+    private EventStream<CustomRewardEvent> _rewardStream;
+    private CancellationTokenSource _cts;
 
     private void Awake()
     {
@@ -32,49 +33,75 @@ public class TwitchRedemptionManager : MonoBehaviour
         }
     }
 
-    private void Update()
+    private async void Start()
     {
-        // Wait until the plugin confirms authentication before subscribing
-        if (authManager == null || !authManager.IsAuthenticated) return;
+        _cts = new CancellationTokenSource();
 
-        if (!isSubscribed)
+        try
         {
-            customRewardEvents = Twitch.API.SubscribeToCustomRewardEvents();
-            isSubscribed = true;
-            Debug.Log("Twitch Plugin: Subscribed to Custom Reward Events.");
-        }
-        
-        // Poll the event stream using TryGetNextEvent
-        if (customRewardEvents != null && customRewardEvents.MaybeResult != null)
-        {
-            CustomRewardEvent curRewardEvent;
-            
-            // Extracts the event if one is available in the buffer
-            customRewardEvents.MaybeResult.TryGetNextEvent(out curRewardEvent);
-            
-            if (curRewardEvent != null)
+            if (authManager != null)
             {
-                Debug.Log($"[Twitch] {curRewardEvent.RedeemerName} redeemed {curRewardEvent.CustomRewardTitle} for {curRewardEvent.CustomRewardCost}!");
-                HandleRedemption(curRewardEvent);
+                await authManager.WaitForAuthenticationAsync(_cts.Token);
             }
+
+            _rewardStream = await Twitch.API.SubscribeToCustomRewardEvents();
+            Debug.Log("Twitch Plugin: Subscribed to Custom Reward Events.");
+
+            await ListenForRedemptionsAsync(_cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Twitch redemption listener failed: {ex}");
+        }
+    }
+
+    private void OnDestroy()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _rewardStream?.Dispose();
+    }
+
+    private async Task ListenForRedemptionsAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            CustomRewardEvent rewardEvent = await _rewardStream.WaitForEvent();
+            Debug.Log($"[Twitch] {rewardEvent.RedeemerName} redeemed {rewardEvent.CustomRewardTitle} for {rewardEvent.CustomRewardCost}!");
+            HandleRedemption(rewardEvent);
         }
     }
 
     private void HandleRedemption(CustomRewardEvent e)
     {
-        // Map the API's CustomRewardTitle directly to your ScriptableObjects
-        if (redemptionLookup.TryGetValue(e.CustomRewardTitle, out var action))
-        {
-            var context = new RedemptionContext
-            {
-                Username = e.RedeemerName,
-                AvatarManager = avatarManager,
-                VipRock = vipRock,
-                FightAnimator = fightAnimator,
-                CoroutineRunner = this
-            };
+        if (!redemptionLookup.TryGetValue(e.CustomRewardTitle, out var action)) return;
 
-            action.Execute(context);
+        var context = new RedemptionContext
+        {
+            Username = e.RedeemerName,
+            AvatarManager = avatarManager,
+            VipRock = vipRock,
+            FightAnimator = fightAnimator
+        };
+
+        // Fire-and-forget: a long-running action (e.g. the VIP fight sequence)
+        // must not block the next redemption from being picked up.
+        _ = RunActionSafely(action, context);
+    }
+
+    private async Task RunActionSafely(RedemptionActionSO action, RedemptionContext context)
+    {
+        try
+        {
+            await action.Execute(context);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Redemption action '{action.rewardTitle}' threw: {ex}");
         }
     }
 }

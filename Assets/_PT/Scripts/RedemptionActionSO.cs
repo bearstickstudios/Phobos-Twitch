@@ -1,6 +1,5 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public abstract class RedemptionActionSO : ScriptableObject
@@ -8,16 +7,18 @@ public abstract class RedemptionActionSO : ScriptableObject
     [Tooltip("The exact Custom Reward Title from your Twitch Dashboard")]
     public string rewardTitle;
 
-    public abstract void Execute(RedemptionContext context);
+    public abstract Task Execute(RedemptionContext context);
 }
 
 [CreateAssetMenu(fileName = "VipRockAction", menuName = "Twitch/Redemptions/VIP Rock")]
 public class VipRockActionSO : RedemptionActionSO
 {
-    public override void Execute(RedemptionContext context)
+    [SerializeField] private float fightDurationSeconds = 6f;
+
+    public override async Task Execute(RedemptionContext context)
     {
         if (context.AvatarManager == null) return;
-        
+
         ChatAvatar userAvatar = context.AvatarManager.FindAvatarByUsername(context.Username);
         if (userAvatar == null) return;
 
@@ -26,7 +27,7 @@ public class VipRockActionSO : RedemptionActionSO
             ChatAvatar currentVip = context.VipRock.GetChild(0).GetComponent<ChatAvatar>();
             if (currentVip == null || currentVip == userAvatar) return;
 
-            context.CoroutineRunner.StartCoroutine(PlayFightSequence(context, userAvatar, currentVip));
+            await PlayFightSequence(context, userAvatar, currentVip);
         }
         else
         {
@@ -34,15 +35,15 @@ public class VipRockActionSO : RedemptionActionSO
         }
     }
 
-    private IEnumerator PlayFightSequence(RedemptionContext context, ChatAvatar challenger, ChatAvatar currentVip)
+    private async Task PlayFightSequence(RedemptionContext context, ChatAvatar challenger, ChatAvatar currentVip)
     {
         currentVip.gameObject.SetActive(false);
         challenger.gameObject.SetActive(false);
-        
+
         if (context.FightAnimator != null)
         {
             context.FightAnimator.SetBool("Fight", true);
-            yield return new WaitForSeconds(6f);
+            await Task.Delay(System.TimeSpan.FromSeconds(fightDurationSeconds));
             context.FightAnimator.SetBool("Fight", false);
         }
 
@@ -60,22 +61,23 @@ public class VipRockActionSO : RedemptionActionSO
 [CreateAssetMenu(fileName = "DuelAction", menuName = "Twitch/Redemptions/Duel")]
 public class DuelActionSO : RedemptionActionSO
 {
-    public override void Execute(RedemptionContext context)
+    public override Task Execute(RedemptionContext context)
     {
-        if (context.AvatarManager == null) return;
-        
-        ChatAvatar challenger = context.AvatarManager.FindAvatarByUsername(context.Username);
-        if (challenger == null) return;
+        if (context.AvatarManager == null) return Task.CompletedTask;
 
-        List<ChatAvatar> potentialOpponents = context.AvatarManager.GetActiveAvatars()
+        ChatAvatar challenger = context.AvatarManager.FindAvatarByUsername(context.Username);
+        if (challenger == null) return Task.CompletedTask;
+
+        var potentialOpponents = context.AvatarManager.GetActiveAvatars()
             .Where(avatar => avatar != challenger && avatar.transform.parent != context.VipRock)
             .ToList();
 
-        if (potentialOpponents.Count == 0) return;
-        
+        if (potentialOpponents.Count == 0) return Task.CompletedTask;
+
         ChatAvatar opponent = potentialOpponents[Random.Range(0, potentialOpponents.Count)];
         ChatAvatar loser = (challenger.currentStrength >= opponent.currentStrength) ? opponent : challenger;
-        
+
         context.AvatarManager.RemoveAvatar(loser.Username);
+        return Task.CompletedTask;
     }
 }

@@ -1,23 +1,25 @@
 ﻿using UnityEngine;
 using TMPro;
-
-public class StreamTitleUI : MonoBehaviour
+namespace PhobosTwitch
 {
-    [SerializeField] private TextMeshProUGUI streamTitleText;
-    [SerializeField] private TwitchAuthManager authManager;
-
-    private void Awake()
+    public class StreamTitleUI : MonoBehaviour
     {
-        authManager.OnStreamTitleFetched += UpdateTitle;
-    }
+        [SerializeField] private TextMeshProUGUI streamTitleText;
+        [SerializeField] private TwitchAuthManager authManager;
 
-    private void OnDestroy()
-    {
-        authManager.OnStreamTitleFetched -= UpdateTitle;
-    }
+        private void Awake()
+        {
+            authManager.OnStreamTitleFetched += UpdateTitle;
+        }
 
-    private void UpdateTitle(string title)
-    {
-        streamTitleText.text = title;
+        private void OnDestroy()
+        {
+            authManager.OnStreamTitleFetched -= UpdateTitle;
+        }
+
+        private void UpdateTitle(string title)
+        {
+            streamTitleText.text = title;
+        }
     }
 }

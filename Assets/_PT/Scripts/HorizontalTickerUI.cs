@@ -1,26 +1,30 @@
 ﻿using TMPro;
 using UnityEngine;
 
-public class HorizontalTickerUI : MonoBehaviour
+namespace PhobosTwitch
 {
-    [SerializeField] private TextMeshProUGUI tickerText;
-    [SerializeField] private RectTransform textRectTransform;
-    [SerializeField] private float scrollSpeed = 100f;
-    [SerializeField] private float resetPositionX = -1920f;
-    [SerializeField] private float startPositionX = 1920f;
-
-    private void Update()
+    public class HorizontalTickerUI : MonoBehaviour
     {
-        textRectTransform.anchoredPosition += Vector2.left * (scrollSpeed * Time.deltaTime);
+        [SerializeField] private TextMeshProUGUI tickerText;
+        [SerializeField] private RectTransform textRectTransform;
+        [SerializeField] private float scrollSpeed = 100f;
+        [SerializeField] private float resetPositionX = -1920f;
+        [SerializeField] private float startPositionX = 1920f;
 
-        if (textRectTransform.anchoredPosition.x <= resetPositionX)
+        private void Update()
         {
-            textRectTransform.anchoredPosition = new Vector2(startPositionX, textRectTransform.anchoredPosition.y);
-        }
-    }
+            textRectTransform.anchoredPosition += Vector2.left * (scrollSpeed * Time.deltaTime);
 
-    public void UpdateTickerContent(string newGoal, string lastBitsDonator, string commands)
-    {
-        tickerText.text = $"<b>Goal:</b> {newGoal}   |   <b>Latest Bits:</b> {lastBitsDonator}   |   <b>Commands:</b> {commands}";
+            if (textRectTransform.anchoredPosition.x <= resetPositionX)
+            {
+                textRectTransform.anchoredPosition = new Vector2(startPositionX, textRectTransform.anchoredPosition.y);
+            }
+        }
+
+        public void UpdateTickerContent(string newGoal, string lastBitsDonator, string commands)
+        {
+            tickerText.text =
+                $"<b>Goal:</b> {newGoal}   |   <b>Latest Bits:</b> {lastBitsDonator}   |   <b>Commands:</b> {commands}";
+        }
     }
 }

@@ -6,102 +6,107 @@ using TwitchSDK;
 using TwitchSDK.Interop;
 using UnityEngine;
 
-public class TwitchRedemptionManager : MonoBehaviour
+namespace PhobosTwitch
 {
-    [Header("Dependencies")]
-    [SerializeField] private TwitchAuthManager authManager;
-    [SerializeField] private ChatAvatarManager avatarManager;
-    [SerializeField] private Transform vipRock;
-    [SerializeField] private Animator fightAnimator;
-
-    [Header("Actions Configuration")]
-    [SerializeField] private List<RedemptionActionSO> availableRedemptions;
-
-    private Dictionary<string, RedemptionActionSO> redemptionLookup;
-    private EventStream<CustomRewardEvent> _rewardStream;
-    private CancellationTokenSource _cts;
-
-    private void Awake()
+    public class TwitchRedemptionManager : MonoBehaviour
     {
-        redemptionLookup = new Dictionary<string, RedemptionActionSO>();
-        foreach (var action in availableRedemptions)
+        [Header("Dependencies")] [SerializeField]
+        private TwitchAuthManager authManager;
+
+        [SerializeField] private ChatAvatarManager avatarManager;
+        [SerializeField] private Transform vipRock;
+        [SerializeField] private Animator fightAnimator;
+
+        [Header("Actions Configuration")] [SerializeField]
+        private List<RedemptionActionSO> availableRedemptions;
+
+        private Dictionary<string, RedemptionActionSO> redemptionLookup;
+        private EventStream<CustomRewardEvent> _rewardStream;
+        private CancellationTokenSource _cts;
+
+        private void Awake()
         {
-            if (action != null && !string.IsNullOrEmpty(action.rewardTitle))
+            redemptionLookup = new Dictionary<string, RedemptionActionSO>();
+            foreach (var action in availableRedemptions)
             {
-                redemptionLookup[action.rewardTitle] = action;
+                if (action != null && !string.IsNullOrEmpty(action.rewardTitle))
+                {
+                    redemptionLookup[action.rewardTitle] = action;
+                }
             }
         }
-    }
 
-    private async void Start()
-    {
-        _cts = new CancellationTokenSource();
-
-        try
+        private async void Start()
         {
-            if (authManager != null)
+            _cts = new CancellationTokenSource();
+
+            try
             {
-                await authManager.WaitForAuthenticationAsync(_cts.Token);
+                if (authManager != null)
+                {
+                    await authManager.WaitForAuthenticationAsync(_cts.Token);
+                }
+
+                _rewardStream = await Twitch.API.SubscribeToCustomRewardEvents();
+                Debug.Log("Twitch Plugin: Subscribed to Custom Reward Events.");
+
+                await ListenForRedemptionsAsync(_cts.Token);
             }
-
-            _rewardStream = await Twitch.API.SubscribeToCustomRewardEvents();
-            Debug.Log("Twitch Plugin: Subscribed to Custom Reward Events.");
-
-            await ListenForRedemptionsAsync(_cts.Token);
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown.
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Twitch redemption listener failed: {ex}");
+            }
         }
-        catch (OperationCanceledException)
+
+        private void OnDestroy()
         {
-            // Normal shutdown.
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _rewardStream?.Dispose();
         }
-        catch (Exception ex)
+
+        private async Task ListenForRedemptionsAsync(CancellationToken token)
         {
-            Debug.LogError($"Twitch redemption listener failed: {ex}");
+            while (!token.IsCancellationRequested)
+            {
+                CustomRewardEvent rewardEvent = await _rewardStream.WaitForEvent();
+                Debug.Log(
+                    $"[Twitch] {rewardEvent.RedeemerName} redeemed {rewardEvent.CustomRewardTitle} for {rewardEvent.CustomRewardCost}!");
+                HandleRedemption(rewardEvent);
+            }
         }
-    }
 
-    private void OnDestroy()
-    {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _rewardStream?.Dispose();
-    }
-
-    private async Task ListenForRedemptionsAsync(CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
+        private void HandleRedemption(CustomRewardEvent e)
         {
-            CustomRewardEvent rewardEvent = await _rewardStream.WaitForEvent();
-            Debug.Log($"[Twitch] {rewardEvent.RedeemerName} redeemed {rewardEvent.CustomRewardTitle} for {rewardEvent.CustomRewardCost}!");
-            HandleRedemption(rewardEvent);
+            if (!redemptionLookup.TryGetValue(e.CustomRewardTitle, out var action)) return;
+
+            var context = new RedemptionContext
+            {
+                Username = e.RedeemerName,
+                AvatarManager = avatarManager,
+                VipRock = vipRock,
+                FightAnimator = fightAnimator
+            };
+
+            // Fire-and-forget: a long-running action (e.g. the VIP fight sequence)
+            // must not block the next redemption from being picked up.
+            _ = RunActionSafely(action, context);
         }
-    }
 
-    private void HandleRedemption(CustomRewardEvent e)
-    {
-        if (!redemptionLookup.TryGetValue(e.CustomRewardTitle, out var action)) return;
-
-        var context = new RedemptionContext
+        private async Task RunActionSafely(RedemptionActionSO action, RedemptionContext context)
         {
-            Username = e.RedeemerName,
-            AvatarManager = avatarManager,
-            VipRock = vipRock,
-            FightAnimator = fightAnimator
-        };
-
-        // Fire-and-forget: a long-running action (e.g. the VIP fight sequence)
-        // must not block the next redemption from being picked up.
-        _ = RunActionSafely(action, context);
-    }
-
-    private async Task RunActionSafely(RedemptionActionSO action, RedemptionContext context)
-    {
-        try
-        {
-            await action.Execute(context);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"Redemption action '{action.rewardTitle}' threw: {ex}");
+            try
+            {
+                await action.Execute(context);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Redemption action '{action.rewardTitle}' threw: {ex}");
+            }
         }
     }
 }
